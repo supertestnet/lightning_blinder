@@ -4,9 +4,9 @@ Trick an LSP into thinking *one* wallet is the sender or recipient when it's *re
 # Protocol setup
 The protocol requires three pieces of software: LSP Blinder Send (LBS), LSP Blinder Receive (LBR), and LSP Blinder Coordinate (LBC).
 
-LBC needs to be software that can do three things: (1) send LN payments (2) receive LN payments (3) communicate with LBR in a manner to be described shortly. Without taking custody of user funds, it will serve as a decoy recipient: the LSP will *think* it is sending money to LBC but it's *really* sending money to LBR.
-
 LBS needs to be software that can do three things: (1) send LN payments (2) parse an LN invoice with a custom field, to be described shortly (3) communicate with LBR in a manner to be described shortly.
+
+LBC needs to be software that can do three things: (1) send LN payments (2) receive LN payments (3) communicate with LBR in a manner to be described shortly. Without taking custody of user funds, it will serve as a decoy recipient: the LSP will *think* it is sending money to LBC but it's *really* sending money to LBR.
 
 LBR needs to be software that can do six things: (1) create hodl invoices (2) detect when a hodl invoice's state changes from "open" (not paid yet) to "pending" (i.e. the invoice has an htlc in a pending state, but it hasn't been settled or resolved yet) (3) receive LN payments (4) modify an LN invoice to add a custom field (5) communicate with LBC in a manner to be described shortly (6) communicate with LBS in a manner to be described shortly.
 
