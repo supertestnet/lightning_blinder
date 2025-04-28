@@ -24,7 +24,7 @@ This protocol enables a bunch of cool features:
 
 - The LBC software is very simple and can use any lightning backend that can send LN payments and receive LN payments. That means anyone can run LBC on top of basically any lightning wallet and charge fees for the use of this blinding software.
 - People who want better privacy than they can get from a regular LSP can use one or more LBCs as a kind of "LN routing vpn," enhancing their privacy.
-- LSP Blinder ruins the heuristics LSPs use to identify recipients. The LSP will think they are forwarding a payment to person A (the LBC) but the money is really going to person B (the LBR).
+- LSP Blinder ruins the heuristics LSPs use to identify recipients. The LSP will think they are forwarding a payment to person A (the LBC) but the money is really going to person B (the LBR). Thus they can no longer reliably trace a payment to the correct recipient, as long as the recipient is using Lightning Blinder.
 - LSPs cannot tell if you are using Lightning Blinder. The only thing indicating that is the custom field in the invoice, but any wallet can add that field as a kind of decoy, thus fooling the LSP into *thinking* you are using Lightning Blinder when you really aren't. Wallets can thus get a privacy advantage without even really using the software just by pretending to use it.
 
 # Expansion option: hide the sender too
