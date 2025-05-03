@@ -17,7 +17,7 @@ Once LBR detects that the invoice's state changed from "open" to "pending," it s
 
 But here's where things get fun: if the payment fails, no payment happened, so there is nothing useful for the LSP to learn; you can't trace a payment that never happens. And if the payment succeeds, then due to the way the lightning network works, LBS necessarily receives the preimage that not only resolves the *original* invoice -- it is also capable of resolving the *wrapped* invoice, because that is locked to the *same preimage.*
 
-So now LBS *sends* that preimage to LBR via the communication channel provided by LBR when they showed LBS the original invoice (the one they appended to it as described above). Once LBR receives the preimage from LBS, it uses that preimage to *settle the wrapped invoice* -- thus completing the route. LBC routed a payment from LBS to LBR, without taking custody of any money, and without its wallet needing any code for routing.
+So now LBS *sends* that preimage to LBR via the communication channel provided when LBR showed LBS the original invoice (i.e. the communication channel LBR appended to the original invoice, as described above). Once LBR receives the preimage from LBS, it uses that preimage to *settle the wrapped invoice* -- thus completing the route. LBC routed a payment from LBS to LBR, without taking custody of any money, and without its wallet needing any code for routing.
 
 # Why this is cool
 This protocol enables a bunch of cool features:
