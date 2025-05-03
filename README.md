@@ -4,7 +4,7 @@ Trick an LSP into thinking *one* wallet is the sender or recipient when it's *re
 # Protocol setup
 The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC).
 
-LBS needs to be software that can do three things: (1) send LN payments (2) parse an LN invoice with a custom field, to be described shortly (3) communicate with LBR in a manner to be described shortly.
+LBS needs to be software that can do two things: (1) send LN payments (2) communicate with LBR in a manner to be described shortly.
 
 LBC needs to be software that can do three things: (1) send LN payments (2) receive LN payments (3) communicate with LBR in a manner to be described shortly. Without taking custody of user funds, it will serve as a decoy recipient: the LSP will *think* it is sending money to LBC but it's *really* sending money to LBR.
 
