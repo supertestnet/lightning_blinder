@@ -1,6 +1,13 @@
 # Lightning Blinder
 Trick an LSP into thinking *one* wallet is the sender or recipient when it's *really* some other wallet
 
+# What is this?
+This is privacy software for the lightning network. The motivation is: sometimes when I talk to people about how great the lightning network is for your privacy, I am told that the only way to send large amounts over the lightning network is to use an LSP, and if you *DO* use an LSP, you don't have great privacy. Even some LSPs say that they can trace lightning payments that flow through them.
+
+For example, Phoenix Wallet has an FAQ that says, "The current version of Phoenix offers no advantage regarding privacy over existing, hosted, custodial wallets. We (ACINQ) know the final destination and amount of payments." [source](https://phoenix.acinq.co/faq) I asked Phoenix for more details on twitter where they pointed out that there is an exception, a case where they *cannot* know the final destination of payments: "in the most common case we can tell the destination...But YMMV [your mileage may vary]...[the] destination may be itself a trampoline node." [source](https://x.com/PhoenixWallet/status/1916844583402590504)
+
+This is insightful: Phoenix cannot tell if the destination of a lightning invoice is the "real" recipient or "a trampoline node" -- which is a type of routing node on the lightning network that sort of serves as a "decoy" recipient. (For more info, see [lnproxy.org/about.html](https://lnproxy.org/about.html).) Phoenix assumes that "in the most common case" a lightning invoice sends the money to a real person directly, without using a decoy (a trampoline node). My motivation with this software is to invalidate Phoenix's assumption and make decoys (trampoline nodes) more common on the lightning network. Below, I describe a protocol for doing so.
+
 # Protocol setup
 The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC).
 
