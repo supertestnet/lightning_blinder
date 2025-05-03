@@ -8,6 +8,8 @@ For example, Phoenix Wallet has an FAQ that says, "The current version of Phoeni
 
 This is insightful: Phoenix cannot tell if the destination of a lightning invoice is the "real" recipient or "a trampoline node" -- which is a type of routing node on the lightning network that sort of serves as a "decoy" recipient. (For more info, see [lnproxy.org/about.html](https://lnproxy.org/about.html).) Phoenix assumes that "in the most common case" a lightning invoice sends the money to a real person directly, without using a decoy (a trampoline node). My motivation with this software is to invalidate Phoenix's assumption and make decoys (trampoline nodes) more common on the lightning network. Below, I describe a protocol for doing so.
 
+By the way, if this software works, it should improve LN privacy regardless of whether you use an LSP, a custodian, or a self-hosted node. But we'll see.
+
 # Protocol setup
 The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC).
 
