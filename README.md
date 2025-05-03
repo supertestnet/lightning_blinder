@@ -1,8 +1,8 @@
-# LSP Blinder
+# Lightning Blinder
 Trick an LSP into thinking *one* wallet is the sender or recipient when it's *really* some other wallet
 
 # Protocol setup
-The protocol requires three pieces of software: LSP Blinder Send (LBS), LSP Blinder Receive (LBR), and LSP Blinder Coordinate (LBC).
+The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC).
 
 LBS needs to be software that can do three things: (1) send LN payments (2) parse an LN invoice with a custom field, to be described shortly (3) communicate with LBR in a manner to be described shortly.
 
@@ -24,19 +24,19 @@ This protocol enables a bunch of cool features:
 
 - The LBC software is very simple and can use any lightning backend that can send LN payments and receive LN payments. That means anyone can run LBC on top of basically any lightning wallet and charge fees for the use of this blinding software.
 - People who want better privacy than they can get from a regular LSP can use one or more LBCs as a kind of "LN routing vpn," enhancing their privacy.
-- LSP Blinder ruins the heuristics LSPs use to identify recipients. The LSP will think they are forwarding a payment to person A (the LBC) but the money is really going to person B (the LBR). Thus they can no longer reliably trace a payment to the correct recipient, as long as the recipient is using LSP Blinder.
-- LSPs cannot tell if you are using LSP Blinder. The only thing indicating that is the information appended to the original invoice, but LSPs do not see that information, only LBS does, and he has no reason to share it with the LSP.
-- Wallets thus get a privacy advantage without even using the software. Because of its undetectability, if even a small percentage of people use LSP Blinder, LSPs can no longer be sure their heuristics work for *anyone,* because they cannot detect who is using it and who isn't.
+- Lightning Blinder ruins the heuristics LSPs use to identify recipients. The LSP will think they are forwarding a payment to person A (the LBC) but the money is really going to person B (the LBR). Thus they can no longer reliably trace a payment to the correct recipient, as long as the recipient is using Lightning Blinder.
+- LSPs cannot tell if you are using Lightning Blinder. The only thing indicating that is the information appended to the original invoice, but LSPs do not see that information, only LBS does, and he has no reason to share it with the LSP.
+- Wallets thus get a privacy advantage without even using the software. Because of its undetectability, if even a small percentage of people use Lightning Blinder, LSPs can no longer be sure their heuristics work for *anyone,* because they cannot detect who is using it and who isn't.
 
 # How to hide the sender too
-The protocol as described above fools an LSP into thinking one of their users is sending money to person A when they are really sending money to person B. But there is another way to use LSP Blinder: have person A -- who I have decided to call Charlie, momentarily -- run the LBC software.
+The protocol as described above fools an LSP into thinking one of their users is sending money to person A when they are really sending money to person B. But there is another way to use Lightning Blinder: have person A -- who I have decided to call Charlie, momentarily -- run the LBC software.
 
-Now suppose a user of LSP Blinder -- whom I shall call Dave -- picks Charlie as their LBC, and suppose a man named Bob wants to pay Dave through Charlie -- so the payment is going Bob -> Charlie -> Dave. When Dave receives the payment from Bob (through Charlie), Bob's LSP thinks Charlie is the recipient when the real recipient is Dave. But that's not all: Charlie is using an LSP too, and Charlie's LSP will think *Charlie* is the sender when he's actually forwarding a payment from Bob to Dave. So not only do you hide Dave (the real recipient), you also hide Bob (the real sender).
+Now suppose a user of Lightning Blinder -- whom I shall call Dave -- picks Charlie as their LBC, and suppose a man named Bob wants to pay Dave through Charlie -- so the payment is going Bob -> Charlie -> Dave. When Dave receives the payment from Bob (through Charlie), Bob's LSP thinks Charlie is the recipient when the real recipient is Dave. But that's not all: Charlie is using an LSP too, and Charlie's LSP will think *Charlie* is the sender when he's actually forwarding a payment from Bob to Dave. So not only do you hide Dave (the real recipient), you also hide Bob (the real sender).
 
-Thus LSP Blinder ruins the heuristics used by LSPs to identify recipients *and senders.* If LSP Blinder sees just a little adoption, LSP heuristics won't work anymore and they will be unable to identify senders and recipients. Even if the payment looks like it's going directly from one of their users to another, they won't know if those people are the "real" senders and recipients or just LBCs forwarding payments for other people. And privacy on the lightning network will be significantly enhanced.
+Thus Lightning Blinder ruins the heuristics used by LSPs to identify recipients *and senders.* If Lightning Blinder sees just a little adoption, LSP heuristics won't work anymore and they will be unable to identify senders and recipients. Even if the payment looks like it's going directly from one of their users to another, they won't know if those people are the "real" senders and recipients or just LBCs forwarding payments for other people. And privacy on the lightning network will be significantly enhanced.
 
 # Read this if you think this sounds like LN Proxy
-LN Proxy (https://github.com/lnproxy) is similar software that *also* hides the "real" recipient from people like LSPs. But only a few people run LN Proxy and I think that's largely because it has a pretty advanced setup procedure: you have to install LND (because other LN implementations don't natively support hodl invoices), run LN Proxy on top of it, and configure a server to expose the web interface so folks can use it. With LSP Blinder, I want to eliminate those requirements.
+LN Proxy (https://github.com/lnproxy) is similar software that *also* hides the "real" recipient from people like LSPs. But only a few people run LN Proxy and I think that's largely because it has a pretty advanced setup procedure: you have to install LND (because other LN implementations don't natively support hodl invoices), run LN Proxy on top of it, and configure a server to expose the web interface so folks can use it. With Lightning Blinder, I want to eliminate those requirements.
 
 I want anyone to be able to run all the pieces of software easily -- you just click a button to run the server directly in your browser, connect the server to almost any lightning wallet (hopefully via NWC), and you're done. Leave it running and check in later to see if you made any money. I plan to lower the barrier to entry compared to LN Proxy by (1) not requiring coordinators to install a wallet that supports hodl invoices (instead, they can use almost ANY lightning wallet) (2) designing the server so you can just run it in your browser.
 
