@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no">
+        <script src="https://supertestnet.github.io/bankify/super_nostr.js"></script>
+        <script src="https://supertestnet.github.io/nwcjs/nwcjs.js"></script>
+        <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
+        <script src="https://bundle.run/bech32@2.0.0"></script>
+        <script src="https://bundle.run/buffer@6.0.3"></script>
+        <script>var Buffer = buffer.Buffer;</script>
+        <script src="https://supertestnet.github.io/bolt11_browser/bolt11.js"></script>
+        <style>
+            * {
+                box-sizing: border-box;
+                font-size: 1.15rem;
+                font-family: Arial, sans-serif;
+            }
+            html {
+                max-width: 800px;
+                padding: 3rem 1rem;
+                margin: auto;
+                line-height: 1.25;
+                padding: 0;
+            }
+            body {
+                margin: 3rem 1rem;
+                word-wrap: break-word;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            input {
+                line-height: 1.25;
+                width: 100%;
+                height: 1.8rem;
+                font-size: 1.15rem;
+                border: 1px solid grey;
+            }
+            .hidden {
+                display: none !important;
+            }
+            .trampoline {
+                padding: 1rem;
+                border: 1px solid green;
+                border-radius: 1rem;
+                margin-bottom: 1rem;
+                background-color: lightgreen;
+            }
+            .tr_self {
+                border: 1px solid blue;
+                background-color: lightblue;
+            }
+            @media screen and (max-width: 600px) {
+            }
+        </style>
+        <style>
+            .black-bg {
+                width: 100%;
+                position: fixed;
+                top: 0;
+                left: 0;
+                background-color: black;
+                opacity: .5;
+                width: 100vw;
+                height: 100vh;
+            }
+            .modal {
+                position: fixed;
+                box-sizing: border-box;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%,-50%);
+                width: 90%;
+                max-width: 560px;
+                background-color: white;
+                border-radius: 1rem;
+                padding: 20px;
+                color: black;
+                text-align: center;
+                word-wrap: break-word;
+            }
+            .modal * {
+                color: black;
+            }
+            .modal input, .modal textarea {
+                max-width: 90%;
+            }
+            .hidden {
+                display: none !important;
+            }
+        </style>
+        <script>
+            var modalVanish = () => {
+                $( ".black-bg" ).classList.add( "hidden" );
+                $( ".modal" ).classList.add( "hidden" );
+            }
+            var showModal = ( content, block_til_clear ) => {
+                if ( block_til_clear ) var fn = `modalVanish();lnBlinder.data_i_seek[ "modal_cleared" ] = true;`; else var fn = `modalVanish();`;
+                $( ".modal" ).innerHTML = `<div class="x_modal" style="position: absolute;right: 1rem;top: 0.5rem;font-size: 2rem; cursor: pointer; color: black;" onclick="${fn}">&times;</div>`;
+                $( ".modal" ).innerHTML += `<div style="overflow-y: auto; max-height: 80vh; margin-top: 1.5rem;">${content}</div>`;
+                $( ".black-bg" ).classList.remove( "hidden" );
+                $( ".modal" ).classList.remove( "hidden" );
+            }
+        </script>
+        <script>
+            var $ = document.querySelector.bind( document );
+            var $$ = document.querySelectorAll.bind( document );
+            var url_params = new URLSearchParams( window.location.search );
+            var url_keys = url_params.keys();
+            var $_GET = {}
+            for ( var key of url_keys ) $_GET[ key ] = url_params.get( key );
+        </script>
+    </head>
+    <body>
+        <h1>Lightning Blinder</h1>
+        <div class="home">
+            <p>Choose your role:</p>
+            <p><button class="sender">Sender</button> <button class="coordinator">Coordinator</button> <button class="recipient">Recipient</button></p>
+        </div>
+        <div class="sender_page hidden">
+            <h2>Sender</h2>
+            <p><button class="send">Send</button></p>
+        </div>
+        <div class="coordinator_page hidden">
+            <h2>Coordinator</h2>
+            <p>Wait here for notifications</p>
+            <div class="all_trampolines hidden"></div>
+        </div>
+        <div class="recipient_page hidden">
+            <h2>Recipient</h2>
+            <p><button class="receive">Receive</button></p>
+            <div class="all_trampolines_2 hidden"></div>
+        </div>
+        <script>
+            $( '.sender' ).onclick = async () => {
+                var nwc_string = prompt( `enter an nwc string with full permissions` );
+                if ( !nwc_string ) return;
+                var is_good = nwcjs.processNWCstring( nwc_string );
+                if ( !is_good ) return;
+                var state_id = lnBlinder.lbs.init( nwc_string );
+                showPage( 'sender_page' );
+                console.log( 'state_id:', state_id );
+            }
+            $( '.coordinator' ).onclick = async () => {
+                //get fee type
+                var html = `
+                    <p>
+                        What type of fee do you want to charge, flat or percentage? A flat fee is like "I will charge 100 sats [or whatever] on every invoice, regaredless of how much the invoice is for." A percentage fee is like "I will charge a 10% fee [or whatever] on every invoice, so the fee for each one depends on how much the invoice is for."
+                    </p>
+                    <p><button class="charge_flat" onclick="lnBlinder.data_i_seek[ 'fee_type' ] = 'flat';modalVanish();">Flat</button></p>
+                    <p><button class="dont_help" onclick="lnBlinder.data_i_seek[ 'fee_type' ] = 'percentage';modalVanish();">Percentage</button></p>
+                `;
+                var block_til_clear = true;
+                showModal( html, block_til_clear );
+                $( '.x_modal' ).classList.add( "hidden" );
+                delete lnBlinder.data_i_seek[ 'fee_type' ];
+                var fee_type = await lnBlinder.getNote( 'fee_type' );
+                delete lnBlinder.data_i_seek[ 'fee_type' ];
+
+                //get fee value
+                var html = `
+                    <p>
+                        You picked ${fee_type} as your fee type. Now enter the value. E.g. ${fee_type === "flat" ? 'enter 10, 50, or 100 to charge 10 sats per invoice, 50 sats per invoice, or 100 sats per invoice' : 'enter 5, 10, or 15 to charge a 5% fee, 10% fee, or 15% fee per invoice'}
+                    </p>
+                    <p><input type="number" class="fee_value" min="0" step="1" value="10"></p>
+                    <p><button class="dont_help" onclick="lnBlinder.data_i_seek[ 'fee_value' ] = $( '.fee_value' ).value;modalVanish();">Submit</button></p>
+                `;
+                var block_til_clear = true;
+                showModal( html, block_til_clear );
+                $( '.x_modal' ).classList.add( "hidden" );
+                delete lnBlinder.data_i_seek[ 'fee_value' ];
+                var fee_value = await lnBlinder.getNote( 'fee_value' );
+                delete lnBlinder.data_i_seek[ 'fee_value' ];
+                var state_id = await lnBlinder.lbc.init( null, fee_type, fee_value );
+                showPage( 'coordinator_page' );
+                console.log( 'state_id:', state_id );
+            }
+            $( '.recipient' ).onclick = async () => {
+                var state_id = await lnBlinder.lbr.init();
+                showPage( 'recipient_page' );
+                console.log( 'state_id:', state_id );
+            }
+            var showPage = page => {
+                $( '.home' ).classList.add( "hidden" );
+                $( '.sender_page' ).classList.add( "hidden" );
+                $( '.coordinator_page' ).classList.add( "hidden" );
+                $( '.recipient_page' ).classList.add( "hidden" );
+                $( `.${page}` ).classList.remove( "hidden" );
+            }
+            window.onload = () => {
+                $( '.send' ).onclick = () => {
+                    var payment_string = prompt( `enter the recipient's payment string` );
+                    lnBlinder.lbs.send( payment_string );
+                }
+                $( '.receive' ).onclick = lnBlinder.lbr.receive;
+            }
+        </script>
+        <script>
+            //dependencies:
+            //https://supertestnet.github.io/bankify/super_nostr.js
+            //https://bundle.run/noble-secp256k1@1.2.14
+            //https://bundle.run/bech32@2.0.0
+            var lnBlinder = {
+                state: {},
+                network: "mainnet",
+                relays: [ "wss://nostrue.com" ],
+                handled: [],
+                data_i_seek: {},
+                getRand: size => lnBlinder.bytesToHex( crypto.getRandomValues( new Uint8Array( size ) ) ),
+                getPubkey: privkey => nobleSecp256k1.getPublicKey( privkey, true ).substring( 2 ),
+                bytesToHex: bytes => bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, "0" ), "" ),
+                hexToBytes: hex => Uint8Array.from( hex.match( /.{1,2}/g ).map( byte => parseInt( byte, 16 ) ) ),
+                hexToText: hex => {
+                    var bytes = new Uint8Array( Math.ceil( hex.length / 2 ) );
+                    var i; for ( i=0; i<hex.length; i++ ) bytes[ i ] = parseInt( hex.substr( i * 2, 2 ), 16 );
+                    var text = new TextDecoder().decode( bytes );
+                    return text;
+                },
+                textToHex: text => {
+                    var encoded = new TextEncoder().encode( text );
+                    return Array.from( encoded )
+                        .map( x => x.toString( 16 ).padStart( 2, "0" ) )
+                        .join( "" );
+                },
+                isValidHex: hex => {
+                    if ( !hex ) return;
+                    var length = hex.length;
+                    if ( length % 2 ) return;
+                    try {
+                        var bigint = BigInt( "0x" + hex, "hex" );
+                    } catch( e ) {
+                        return;
+                    }
+                    var prepad = bigint.toString( 16 );
+                    var i; for ( i=0; i<length; i++ ) prepad = "0" + prepad;
+                    var padding = prepad.slice( -Math.abs( length ) );
+                    return ( padding === hex );
+                },
+                getInvoiceAmount: ( invoice, customNetwork ) => {
+                    var decoded = bolt11.decode( invoice, customNetwork );
+                    var amount = decoded[ "satoshis" ].toString();
+                    return Number( amount );
+                },
+                getInvoicePmthash: ( invoice, customNetwork ) => {
+                    var decoded = bolt11.decode( invoice, customNetwork );
+                    var i; for ( i=0; i<decoded[ "tags" ].length; i++ ) {
+                        if ( decoded[ "tags" ][ i ][ "tagName" ] == "payment_hash" ) return decoded[ "tags" ][ i ][ "data" ].toString();
+                    }
+                },
+                getInvoiceLocktime: ( invoice, customNetwork ) => {
+                    var decoded = bolt11.decode( invoice, customNetwork );
+                    var i; for ( i=0; i<decoded[ "tags" ].length; i++ ) {
+                        if ( decoded[ "tags" ][ i ][ "tagName" ] == "min_final_cltv_expiry" ) return decoded[ "tags" ][ i ][ "data" ].toString();
+                    }
+                },
+                lbr: {
+                    init: nwc_string => {
+                        var state_id = "r_" + lnBlinder.getRand( 16 );
+                        if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
+                        var state_obj = {
+                            privkey: super_nostr.getPrivkey(),
+                            payments_in_progress: {},
+                            nwc_string,
+                        }
+                        lnBlinder.state[ state_id ] = state_obj;
+                        super_nostr.newPermanentConnection( lnBlinder.relays[ 0 ], lnBlinder.lbc.listenFunction, lnBlinder.lbc.handleFunction );
+                        return state_id;
+                    },
+                    receive: async ( state_id, amount, coordinator ) => {
+                        if ( !state_id || typeof state_id !== "string" ) {
+                            var state_ids = Object.keys( lnBlinder.state );
+                            var state_id;
+                            state_ids.every( id => {if ( !id.startsWith( 'r' ) ) return true; state_id = id; });
+                        }
+                        var state = lnBlinder.state[ state_id ];
+                        if ( !amount || typeof amount !== "number" ) amount = Number( prompt( `enter an amount of sats you want to receive` ) );
+                        if ( !amount ) return;
+                        $( '.all_trampolines_2' ).classList.remove( "hidden" );
+                        await super_nostr.waitSomeSeconds( 1 );
+                        var tries = 0;
+                        var loop = async () => {
+                            alert( `you will have 3 seconds to copy the nprofile of whoever you want -- get ready, you only get 3 tries` );
+                            await super_nostr.waitSomeSeconds( 3 );
+                            if ( !coordinator ) coordinator = prompt( `enter the nprofile of whoever you want to add to this route` );
+                            if ( !coordinator ) {
+                                tries = tries + 1;
+                                if ( tries > 3 ) return;
+                                return loop();
+                            }
+                            return coordinator;
+                        }
+                        var coordinator = await loop();
+                        $( '.all_trampolines_2' ).classList.add( "hidden" );
+                        if ( !coordinator ) return;
+                        var privkey = lnBlinder.getRand( 32 );
+                        var pubkey = lnBlinder.getPubkey( privkey );
+                        var [ c_pubkey, relays ] = lnBlinder.lbr.convertNEvent( coordinator );
+                        var uuid = lnBlinder.getRand( 32 );
+                        var message_for_coordinator = JSON.stringify({
+                            type: "get_wrappable_invoice",
+                            value: {
+                                uuid,
+                                amount,
+                            }
+                        });
+                        var emsg = await super_nostr.alt_encrypt( privkey, c_pubkey, message_for_coordinator );
+                        var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", c_pubkey ] ] );
+                        super_nostr.sendEvent( event, relays[ 0 ] );
+                        console.log( 'I am the user, I am awaiting an invoice...' );
+                        state.payments_in_progress[ uuid ] = [ "awaiting_invoice", amount ];
+                        var loop = async () => {
+                            await super_nostr.waitSomeSeconds( 3 );
+                            console.log( 'I am the user, I am awaiting an invoice...' );
+                            var relay = relays[ 0 ];
+                            var ids = null;
+                            var authors = [ c_pubkey ];
+                            var kinds = [ 4 ];
+                            var until = null;
+                            var since = Math.floor( Date.now() / 1000 ) - 20;
+                            var limit = 1;
+                            var etags = null;
+                            var ptags = [ pubkey ];
+                            var replies = await super_nostr.getEvents( relay, ids, authors, kinds, until, since, limit, etags, ptags );
+                            if ( replies.length ) return replies[ 0 ];
+                            return await loop();
+                        }
+                        var reply = await loop();
+                        if ( reply.kind !== 4 ) return;
+                        var json;
+                        try {
+                            reply.content = await super_nostr.alt_decrypt( privkey, reply.pubkey, reply.content );
+                            json = JSON.parse( reply.content );
+                        } catch ( e ) {}
+                        if ( json.type !== "get_wrappable_invoice_reply" ) return;
+                        if ( json.error ) return console.log( json.error );
+                        if ( json.value.uuid !== uuid ) return;
+                        if ( !json.value.invoice ) return;
+                        var invoice = json.value.invoice;
+                        var pmthash = lnBlinder.getInvoicePmthash( invoice );
+                        var locktime = lnBlinder.getInvoiceLocktime( invoice );
+                        locktime = Number( locktime );
+                        var wrapped_locktime = locktime + 40;
+                        if ( !nwcjs.nwc_infos.length ) nwcjs.processNWCstring( lnBlinder.state[ state_id ].nwc_string );
+                        var nwc_info = nwcjs.nwc_infos[ 0 ];
+                        if ( nwcjs.nwc_infos.length ) {
+                            var nwc_info = nwcjs.nwc_infos[ 0 ];
+                            var delay_tolerance = 10;
+                            var reply = await nwcjs.makeHodlInvoice( nwc_info, amount, pmthash, wrapped_locktime, null, null, delay_tolerance );
+                            console.log( reply );
+                            console.log( 'here is your wrapped invoice:' );
+                            console.log( reply.result.invoice );
+                            //TODO: handle the case where the above command does not work
+                            var wrapped_invoice = reply.result.invoice;
+                            state.payments_in_progress[ uuid ] = [ "awaiting_wrapped_invoice", amount, invoice, wrapped_locktime, coordinator ];
+                            lnBlinder.lbr.phaseTwo( state_id, uuid, wrapped_invoice );
+                        } else {
+                            console.log( 'original invoice:', invoice );
+                            console.log( 'payment hash:', pmthash );
+                            console.log( 'amount:', amount );
+                            console.log( `make a "wrapped invoice" with these parameters: amount,`, amount, 'pmthash,', pmthash, 'locktime:', wrapped_locktime );
+                            console.log( 'you can use this command if you have lnd:' );
+                            console.log( `lncli --network=signet addholdinvoice ${pmthash} --amt ${amount} --cltv_expiry_delta ${wrapped_locktime}` );
+                            state.payments_in_progress[ uuid ] = [ "awaiting_wrapped_invoice", amount, invoice, wrapped_locktime, coordinator ];
+                            console.log( `then run this command:` );
+                            console.log(  `lnBlinder.lbr.phaseTwo( '${state_id}', '${uuid}', 'insert_your_wrapped_invoice_here' );` );
+                        }
+                    },
+                    convertNEvent: nevent => {
+                        var arr = bech32.bech32.fromWords( bech32.bech32.decode( nevent, 100_000 ).words );
+                        var hex = lnBlinder.bytesToHex( arr );
+                        if ( !hex.startsWith( "0020" ) ) var event_id = hex.substring( hex.length - 64 );
+                        else var event_id = hex.substring( 4, 68 );
+                        if ( !hex.startsWith( "0020" ) ) hex = hex.substring( 0, hex.length - 64 );
+                        else hex = hex.substring( 68 );
+                        var relays = [];
+                        var loop = () => {
+                            if ( hex.startsWith( "01" ) ) {
+                                var relay_length = parseInt( hex.substring( 2, 4 ), 16 );
+                                relays.push( lnBlinder.hexToText( hex.substring( 4, 4 + relay_length * 2 ) ) );
+                                hex = hex.substring( 4 + relay_length * 2 );
+                                loop();
+                            }
+                        }
+                        loop();
+                        return [ event_id, relays ];
+                    },
+                    phaseTwo: async ( state_id, uuid, wrapped_invoice ) => {
+                        //show the wrapped invoice to the LBC
+                        var state = lnBlinder.state[ state_id ];
+                        var privkey = lnBlinder.getRand( 32 );
+                        var pubkey = lnBlinder.getPubkey( privkey );
+                        var coordinator = state.payments_in_progress[ uuid ][ 4 ];
+                        var [ c_pubkey, relays ] = lnBlinder.lbr.convertNEvent( coordinator );
+                        var message_for_coordinator = JSON.stringify({
+                            type: "pay_me",
+                            value: {
+                                uuid,
+                                wrapped_invoice,
+                                recipient_state_id: state_id,
+                            }
+                        });
+                        var emsg = await super_nostr.alt_encrypt( privkey, c_pubkey, message_for_coordinator );
+                        var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", c_pubkey ] ] );
+                        super_nostr.sendEvent( event, relays[ 0 ] );
+                        var original_invoice = state.payments_in_progress[ uuid ][ 2 ];
+                        state.payments_in_progress[ uuid ] = [ "awaiting_payment", wrapped_invoice, original_invoice ];
+                        var customNetwork;
+                        if ( wrapped_invoice.startsWith( "lntbs" ) ) customNetwork = { bech32: "tbs", pubKeyHash: 63, scriptHash: 123, validWitnessVersions: [ 0, 1 ] }
+                        var pmthash = lnBlinder.getInvoicePmthash( wrapped_invoice, customNetwork );
+                        if ( nwcjs.nwc_infos.length ) {
+                            var loop = async () => {
+                                await super_nostr.waitSomeSeconds( 3 );
+                                var nwc_info = nwcjs.nwc_infos[ 0 ];
+                                var delay_tolerance = 10;
+                                var status_info = await nwcjs.checkInvoice( nwc_info, wrapped_invoice, delay_tolerance );
+                                //TODO: handle the case where the above command fails
+                                var status = status_info.result.hodl_status;
+                                console.log( status );
+                                if ( status.startsWith( "PAYMENT_DETECTED" ) ) return;
+                                return await loop();
+                            }
+                            await loop();
+                            lnBlinder.lbr.phaseThree( state_id, uuid );
+                        } else {
+                            console.log( `check your invoice's status like this if you have LND:` );
+                            console.log( `lncli --network=signet lookupinvoice ${pmthash}` );
+                            console.log( `when your invoice's status goes from OPEN to ACCEPTED, run this command:` );
+                            console.log( `lnBlinder.lbr.phaseThree( '${state_id}', '${uuid}' );` );
+                        }
+                    },
+                    phaseThree: async ( state_id, uuid ) => {
+                        //show the original invoice to the LBS
+                        var state = lnBlinder.state[ state_id ];
+                        var privkey = lnBlinder.getRand( 32 );
+                        var pubkey = lnBlinder.getPubkey( privkey );
+                        var relays = lnBlinder.relays;
+                        var nprofile = lnBlinder.lbc.convertPubkeyAndRelaysToNprofile( "nprofile", pubkey, relays );
+                        var payment = state.payments_in_progress[ uuid ];
+                        var wrapped_invoice = payment[ 1 ];
+                        var original_invoice = payment[ 2 ];
+                        var listenFunction = async socket => {
+                            var subId = super_nostr.bytesToHex( crypto.getRandomValues( new Uint8Array( 8 ) ) );
+                            var filter  = {}
+                            filter.kinds = [ 4 ];
+                            filter.since = Math.floor( Date.now() / 1000 );
+                            filter[ "#p" ] = [ pubkey ];
+                            var subscription = [ "REQ", subId, filter ];
+                            socket.send( JSON.stringify( subscription ) );
+                        }
+                        var handleFunction = async message => {
+                            var [ type, subId, event ] = JSON.parse( message.data );
+                            if ( !event || event === true ) return;
+                            if ( event.kind !== 4 ) return;
+                            var json;
+                            try {
+                                event.content = await super_nostr.alt_decrypt( privkey, event.pubkey, event.content );
+                                json = JSON.parse( event.content );
+                            } catch ( e ) {}
+                            console.log( json );
+                            if ( json.type === "preimage" ) {
+                                if ( nwcjs.nwc_infos.length ) {
+                                    var nwc_info = nwcjs.nwc_infos[ 0 ];
+                                    var delay_tolerance = 10;
+                                    var status_info = await nwcjs.settleHodlInvoice( nwc_info, json.value.preimage, delay_tolerance );
+                                    //TODO: handle the case where the above command fails
+                                    var settled_status = status_info.result.hodl_status;
+                                    delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
+                                } else {
+                                    console.log( 'settle your invoice with this preimage:' );
+                                    console.log( json.value.preimage );
+                                    console.log( `if you have lnd you can use this command:` );
+                                    console.log( `lncli --network=signet settleinvoice ${json.value.preimage}` );
+                                    delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
+                                }
+                                showModal( `<p>received</p>` );
+                            }
+                        }
+                        var connection = await super_nostr.newPermanentConnection( lnBlinder.relays[ 0 ], listenFunction, handleFunction );
+                        payment = [ "awaiting_preimage", wrapped_invoice, original_invoice, nprofile ];
+                        console.log( 'show this to LBS:' );
+                        var payment_string = `lightning:${original_invoice}?comms_channel=${nprofile}`;
+                        console.log( payment_string );
+                        console.log( `have him run this command:` );
+                        console.log( `lnBlinder.lbs.send( '${payment_string}' )` );
+                    },
+                },
+                lbc: {
+                    fee: 100,
+                    fee_type: 'flat',
+                    hashes_for_which_i_await_preimages: {},
+                    init: async ( nwc_string, fee_type, fee_value ) => {
+                        if ( fee_type && fee_value ) {
+                            lnBlinder.lbc.fee_type = fee_type;
+                            lnBlinder.lbc.fee = fee_value;
+                        }
+                        var state_id = "c_" + lnBlinder.getRand( 16 );
+                        var privkey = lnBlinder.getRand( 32 );
+                        var pubkey = lnBlinder.getPubkey( privkey );
+                        var relays = lnBlinder.relays;
+                        var nprofile = lnBlinder.lbc.convertPubkeyAndRelaysToNprofile( "nprofile", pubkey, relays );
+                        console.log( 'nprofile:' );
+                        console.log( nprofile );
+                        // if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with full permissions' );
+                        var state_obj = {
+                            privkey,
+                            nprofile,
+                            nwc_string,
+                            payments_in_progress: {},
+                        }
+                        lnBlinder.state[ state_id ] = state_obj;
+                        lnBlinder.lbc.startLoop();
+                        return state_id;
+                    },
+                    listenFunction: async socket => {
+                        var state_ids = Object.keys( lnBlinder.state );
+                        var state_id;
+                        state_ids.every( id => {if ( !id.startsWith( 'c' ) ) return true; state_id = id; });
+                        if ( !state_id ) state_ids.every( id => {if ( !id.startsWith( 'r' ) ) return true; state_id = id; });
+                        var privkey = lnBlinder.state[ state_id ].privkey;
+                        var pubkey = super_nostr.getPubkey( privkey );
+                        var subId = super_nostr.getPrivkey().substring( 0, 16 );
+                        var filter = {}
+                        filter.kinds = [ 4 ];
+                        filter.since = Math.floor( Date.now() / 1000 );
+                        filter[ "#p" ] = [ pubkey ];
+                        var filter2 = {kinds: [ 41865 ], since: Math.floor( Date.now() / 1000 ) - 600,}
+                        var subscription = [ "REQ", subId, filter, filter2 ];
+                        socket.send( JSON.stringify( subscription ) );
+                    },
+                    handleFunction: async message => {
+                        var [ type, subId, event ] = JSON.parse( message.data );
+                        if ( !event || event === true ) return;
+                        var state_ids = Object.keys( lnBlinder.state );
+                        var state_id;
+                        state_ids.every( id => {if ( !id.startsWith( 'c' ) ) return true; state_id = id; });
+                        if ( !state_id ) state_ids.every( id => {if ( !id.startsWith( 'r' ) ) return true; state_id = id; });
+                        var state = lnBlinder.state[ state_id ];
+                        var privkey = state.privkey;
+                        var pubkey = super_nostr.getPubkey( privkey );
+                        if ( event.kind === 41865 ) {
+                            if ( lnBlinder.handled.includes( event.id ) ) return;
+                            lnBlinder.handled.push( event.id );
+                            var tr_pubkey = event.pubkey;
+                            var tr_relays = JSON.parse( event.content ).relays;
+                            var tr_nprofile = lnBlinder.lbc.convertPubkeyAndRelaysToNprofile( "nprofile", tr_pubkey, tr_relays );
+                            var unix_timestamp = event.created_at * 1000;
+                            var date = new Date( unix_timestamp ).toLocaleDateString( "en-CA" );
+                            var time = new Date( unix_timestamp ).toLocaleTimeString();
+                            var timestamp = `${date} ${time}`;
+                            var html = `
+                                <div class="trampoline" data-timestamp="${Math.floor( unix_timestamp / 1000 )}">
+                                    <div>Fee: <span class="tr_fee"></span></div>
+                                    <div>Time: <span class="tr_time"></span></div>
+                                    <div>Nprofile: <span class="tr_nprofile"></span></div>
+                                </div>
+                            `;
+                            var div = document.createElement( "div" );
+                            div.innerHTML = html;
+                            div = div.firstElementChild;
+                            div.setAttribute( "data-nprofile", tr_nprofile );
+                            div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = JSON.parse( event.content ).fee;
+                            if ( JSON.parse( event.content ).fee_type === "flat" ) div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div.getElementsByClassName( "tr_fee" )[ 0 ].innerText + " sats";
+                            else div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div.getElementsByClassName( "tr_fee" )[ 0 ].innerText + "%";
+                            div.getElementsByClassName( "tr_time" )[ 0 ].innerText = timestamp;
+                            div.getElementsByClassName( "tr_nprofile" )[ 0 ].innerText = tr_nprofile;
+                            if ( event.pubkey === pubkey ) div.classList.add( "tr_self" );
+                            var div2 = document.createElement( "div" );
+                            div2.innerHTML = html;
+                            div2 = div2.firstElementChild;
+                            div2.setAttribute( "data-nprofile", tr_nprofile );
+                            div2.getElementsByClassName( "tr_fee" )[ 0 ].innerText = JSON.parse( event.content ).fee;
+                            if ( JSON.parse( event.content ).fee_type === "flat" ) div2.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div2.getElementsByClassName( "tr_fee" )[ 0 ].innerText + " sats";
+                            else div2.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div2.getElementsByClassName( "tr_fee" )[ 0 ].innerText + "%";
+                            div2.getElementsByClassName( "tr_time" )[ 0 ].innerText = timestamp;
+                            div2.getElementsByClassName( "tr_nprofile" )[ 0 ].innerText = tr_nprofile;
+                            var now = Math.floor( Date.now() / 1000 );
+                            var pubkeys = [];
+                            $$( '.trampoline' ).forEach( item => {
+                                pubkeys.push( lnBlinder.lbr.convertNEvent( item.getAttribute( "data-nprofile" ) )[ 0 ] );
+                            });
+                            var entry_to_remove = pubkeys.indexOf( event.pubkey );
+                            var i; for ( i=0; i<2; i++ ) {
+                                if ( pubkeys.includes( event.pubkey ) ) $$( '.trampoline' )[ entry_to_remove ].remove();
+                            }
+                            if ( Math.abs( event.created_at - now ) < 5 ) {
+                                $( '.all_trampolines' ).prepend( div );
+                                $( '.all_trampolines_2' ).prepend( div2 );
+                            } else {
+                                $( '.all_trampolines' ).append( div );
+                                $( '.all_trampolines_2' ).append( div2 );
+                            }
+                            return;
+                        }
+                        if ( event.kind !== 4 ) return;
+                        var json;
+                        try {
+                            event.content = await super_nostr.alt_decrypt( privkey, event.pubkey, event.content );
+                            json = JSON.parse( event.content );
+                        } catch ( e ) {}
+                        // if ( !nwcjs.nwc_infos.length ) nwcjs.processNWCstring( state.nwc_string );
+                        // var nwc_info = nwcjs.nwc_infos[ 0 ];
+                        var delay_tolerance = 10;
+                        if ( json.type === "get_wrappable_invoice" ) {
+                            if ( !json.value.amount || typeof json.value.amount !== "number" ) return;
+                            if ( !json.value.uuid || typeof json.value.uuid !== "string" ) return;
+                            if ( json.value.uuid.length !== 64 ) return;
+                            if ( !lnBlinder.isValidHex( json.value.uuid ) ) return;
+                            var fee_ill_get = lnBlinder.lbc.fee_type === "flat" ? Number( lnBlinder.lbc.fee ) : Math.round( Number( json.value.amount ) + ( Number( json.value.amount ) * ( Number( lnBlinder.lbc.fee ) / 100 ) ) ) - Number( json.value.amount );
+                            var html = `
+                                <p>
+                                    Someone wants to include you in their route! Do you want to earn ${fee_ill_get} sats? If so, you will be prompted to create an invoice for ${Number( json.value.amount ) + Number( fee_ill_get )} sats and then pay one for ${Number( json.value.amount )} sats.
+                                </p>
+                                <p><button class="do_help" onclick="lnBlinder.data_i_seek[ 'help_user' ] = true;modalVanish();">Help</button></p>
+                                <p><button class="dont_help" onclick="lnBlinder.data_i_seek[ 'help_user' ] = false;modalVanish();">Don't help</button></p>
+                            `;
+                            var block_til_clear = true;
+                            showModal( html, block_til_clear );
+                            $( '.x_modal' ).classList.add( "hidden" );
+                            delete lnBlinder.data_i_seek[ 'help_user' ];
+                            var conf = await lnBlinder.getNote( 'help_user' );
+                            delete lnBlinder.data_i_seek[ 'help_user' ];
+                            if ( !conf ) {
+                                var reply = JSON.stringify({
+                                    type: "get_wrappable_invoice_reply",
+                                    error: "the coordinator decided not to help",
+                                    value: {}
+                                });
+                                var emsg = await super_nostr.alt_encrypt( privkey, event.pubkey, reply );
+                                var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
+                                var relays = lnBlinder.relays;
+                                super_nostr.sendEvent( event, relays[ 0 ] );
+                                return;
+                            }
+                            state.payments_in_progress[ json.value.uuid ] = [ "getting_invoice", json.value.amount ];
+                            console.log( 'I am the server, I am getting an invoice...' );
+                            var amount = json.value.amount + fee_ill_get;
+                            var desc = '';
+                            // var invoice_info = await nwcjs.makeInvoice( nwc_info, amount, desc, delay_tolerance );
+                            // var invoice = invoice_info.result.invoice;
+                            var invoice = prompt( `enter a lightning invoice for this amount: ${amount} sats` );
+                            //TODO: handle connection errors
+                            console.log( 'got it! sending it to the user now' );
+                            state.payments_in_progress[ json.value.uuid ] = [ "awaiting_wrapped_invoice", invoice ];
+                            var reply = JSON.stringify({
+                                type: "get_wrappable_invoice_reply",
+                                value: {
+                                    uuid: json.value.uuid,
+                                    invoice,
+                                }
+                            });
+                            var emsg = await super_nostr.alt_encrypt( privkey, event.pubkey, reply );
+                            var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
+                            var relays = lnBlinder.relays;
+                            super_nostr.sendEvent( event, relays[ 0 ] );
+                        }
+                        if ( json.type === "pay_me" ) {
+                            //ensure the wrapped invoice's payment hash matches the one in the invoice the LBC created before
+                            var wrapped_invoice = json.value.wrapped_invoice;
+                            var uuid = json.value.uuid;
+                            var recipient_state_id = json.value.recipient_state_id;
+                            if ( !wrapped_invoice || !uuid ) return;
+                            if ( !recipient_state_id ) return;
+                            if ( !state.payments_in_progress.hasOwnProperty( uuid ) ) return;
+                            var original_payment = state.payments_in_progress[ uuid ];
+                            if ( original_payment[ 0 ] !== "awaiting_wrapped_invoice" ) return;
+                            var original_invoice = original_payment[ 1 ];
+                            var original_invoice_pmthash = lnBlinder.getInvoicePmthash( original_invoice );
+                            var customNetwork;
+                            if ( wrapped_invoice.startsWith( "lntbs" ) ) customNetwork = { bech32: "tbs", pubKeyHash: 63, scriptHash: 123, validWitnessVersions: [ 0, 1 ] }
+                            var wrapped_invoice_pmthash = lnBlinder.getInvoicePmthash( wrapped_invoice, customNetwork );
+                            console.log( 'wrapped_invoice_pmthash:', wrapped_invoice_pmthash );
+                            console.log( 'original_invoice_pmthash:', original_invoice_pmthash );
+                            if ( wrapped_invoice_pmthash !== original_invoice_pmthash ) return;
+                            var original_invoice_amount = lnBlinder.getInvoiceAmount( original_invoice );
+                            var wrapped_invoice_amount = lnBlinder.getInvoiceAmount( wrapped_invoice, customNetwork );
+                            console.log( 'wrapped_invoice_amount:', wrapped_invoice_amount );
+                            console.log( 'original_invoice_amount:', original_invoice_amount );
+                            if ( original_invoice_amount - wrapped_invoice_amount < state.fee ) return;
+                            delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
+                            hashes_for_which_i_await_preimages[ wrapped_invoice_pmthash ] = state.fee;
+                            console.log( 'all is well! pay this invoice:' );
+                            console.log( wrapped_invoice );
+                            // console.log( 'by the way, remember, as LBR you are supposed to do this:' );
+                            // console.log( `lncli --network=signet lookupinvoice ${wrapped_invoice_pmthash}` );
+                            // console.log( `when your invoice's status goes from OPEN to ACCEPTED, run this command:` );
+                            // console.log( `lnBlinder.lbr.phaseThree( '${recipient_state_id}', '${uuid}' );` );
+                        }
+                    },
+                    convertPubkeyAndRelaysToNprofile: ( prefix, pubkey, relays ) => {
+                        var relays_str = "";
+                        relays.forEach( relay => {
+                            var relay_str = lnBlinder.textToHex( relay );
+                            var len = ( relay_str.length / 2 ).toString( 16 );
+                            if ( len.length % 2 ) len = "0" + len;
+                            relays_str = relays_str + "01" + len + relay_str;
+                        });
+                        var hex = relays_str + "0020" + pubkey;
+                        var bytes = lnBlinder.hexToBytes( hex );
+                        var nevent = bech32.bech32.encode( prefix, bech32.bech32.toWords( bytes ), 100_000 );
+                        return nevent;
+                    },
+                    startLoop: async () => {
+                        var state_ids = Object.keys( lnBlinder.state );
+                        var state_id;
+                        state_ids.every( id => {if ( !id.startsWith( 'c' ) ) return true; state_id = id; });
+                        if ( !state_id ) return console.log( 'run init first' );
+                        var state = lnBlinder.state[ state_id ];
+                        var connection = await super_nostr.newPermanentConnection( lnBlinder.relays[ 0 ], lnBlinder.lbc.listenFunction, lnBlinder.lbc.handleFunction );
+                        try {
+                            var time_to_wait = 300;
+                            var num_of_seconds_waited = time_to_wait;
+                            var loop = async () => {
+                                //remove old items
+                                var now = Math.floor( Date.now() / 1000 );
+                                $$( '.trampoline' ).forEach( item => {
+                                    if ( item.getAttribute( "data-timestamp" ) < now - 600 ) item.classList.add( "hidden" );
+                                });
+
+                                //announce your availability every 5 minutes
+                                if ( num_of_seconds_waited >= time_to_wait ) {
+                                    var socket = super_nostr.sockets[ connection ].socket;
+                                    var kind = 41865;
+                                    var privkey = state.privkey;
+                                    var event = await super_nostr.prepEvent( privkey, JSON.stringify({
+                                        fee: lnBlinder.lbc.fee,
+                                        fee_type: lnBlinder.lbc.fee_type,
+                                        relays: lnBlinder.relays,
+                                    }), kind );
+                                    num_of_seconds_waited = 0;
+                                    if ( socket.readyState !== 1 ) await super_nostr.waitSomeSeconds( 3 );
+                                    super_nostr.sendEvent( event, socket );
+                                } else {
+                                    console.log( 'time til next message:', time_to_wait - num_of_seconds_waited );
+                                }
+                                await super_nostr.waitSomeSeconds( 10 );
+                                num_of_seconds_waited = num_of_seconds_waited + 10;
+                                loop();
+                            }
+                            loop();
+                        } catch ( e ) {
+                            console.log( 'error, restarting loop...' );
+                            await super_nostr.waitSomeSeconds( 3 );
+                            lnBlinder.lbc.startLoop();
+                        }
+                    },
+                },
+                lbs: {
+                    init: nwc_string => {
+                        var state_id = "s_" + lnBlinder.getRand( 16 );
+                        if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
+                        var state_obj = {
+                            nwc_string,
+                        }
+                        lnBlinder.state[ state_id ] = state_obj;
+                        return state_id;
+                    },
+                    send: async payment_string => {
+                        var state_ids = Object.keys( lnBlinder.state );
+                        var state_id;
+                        state_ids.every( id => {if ( !id.startsWith( 's' ) ) return true; state_id = id; });
+                        var [ invoice, nprofile ] = payment_string.split( ":" )[ 1 ].split( "?comms_channel=" );
+                        console.log( 'pay this invoice:' );
+                        console.log( invoice );
+                        if ( !nwcjs.nwc_infos.length ) nwcjs.processNWCstring( lnBlinder.state[ state_id ].nwc_string );
+                        var nwc_info = nwcjs.nwc_infos[ 0 ];
+                        var conf = confirm( `click ok if you want to pay automatically or cancel if you want to pay manually` );
+                        if ( conf ) {
+                            nwcjs.tryToPayInvoice( nwc_info, invoice );
+                            var loop = async () => {
+                                await super_nostr.waitSomeSeconds( 3 );
+                                var delay_tolerance = 10;
+                                var status_info = await nwcjs.checkInvoice( nwc_info, invoice, delay_tolerance );
+                                //TODO: handle the case where the above command fails
+                                console.log( status_info );
+                                var paid = !!status_info.result.settled_at;
+                                console.log( 'paid:', paid );
+                                if ( paid ) return status_info.result.preimage;
+                                return await loop();
+                            }
+                            if ( nwcjs.nwc_infos.length ) {
+                                var preimage = await loop();
+                            } else {
+                                var preimage = prompt( 'pay the invoice in your console and enter the preimage' );
+                            }
+                        } else {
+                            var preimage = prompt( 'pay the invoice in your console and enter the preimage' );
+                        }
+                        var privkey = lnBlinder.getRand( 32 );
+                        var pubkey = lnBlinder.getPubkey( privkey );
+                        var [ r_pubkey, relays ] = lnBlinder.lbr.convertNEvent( nprofile );
+                        var message_for_receiver = JSON.stringify({
+                            type: "preimage",
+                            value: {
+                                preimage,
+                            }
+                        });
+                        var emsg = await super_nostr.alt_encrypt( privkey, r_pubkey, message_for_receiver );
+                        var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", r_pubkey ] ] );
+                        super_nostr.sendEvent( event, relays[ 0 ] );
+                        showModal( `<p>sent</p>` );
+                    },
+                },
+                waitSomeTime: num => new Promise( resolve => setTimeout( resolve, num ) ),
+                getNote: async item => {
+                    var loop = async () => {
+                        await lnBlinder.waitSomeTime( 100 );
+                        if ( !lnBlinder.data_i_seek.hasOwnProperty( item ) ) return loop();
+                        return lnBlinder.data_i_seek[ item ];
+                    }
+                    var returnable = await loop();
+                    return returnable;
+                },
+            }
+        </script>
+        <div class="black-bg hidden"></div>
+        <div class="modal hidden"></div>
+    </body>
+</html>
