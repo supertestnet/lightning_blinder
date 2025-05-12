@@ -128,12 +128,11 @@
         <div class="coordinator_page hidden">
             <h2>Coordinator</h2>
             <p>Wait here for notifications</p>
-            <div class="all_trampolines hidden"></div>
         </div>
         <div class="recipient_page hidden">
             <h2>Recipient</h2>
             <p><button class="receive">Receive</button></p>
-            <div class="all_trampolines_2 hidden"></div>
+            <div class="all_trampolines hidden"></div>
         </div>
         <script>
             $( '.sender' ).onclick = async () => {
@@ -205,11 +204,15 @@
             //https://bundle.run/noble-secp256k1@1.2.14
             //https://bundle.run/bech32@2.0.0
             var lnBlinder = {
-                state: {},
+                state: {
+                    hashes_for_which_i_await_preimages: {},
+                    earnings: [],
+                },
                 network: "mainnet",
                 relays: [ "wss://nostrue.com" ],
                 handled: [],
                 data_i_seek: {},
+                handling_payment: false,
                 getRand: size => lnBlinder.bytesToHex( crypto.getRandomValues( new Uint8Array( size ) ) ),
                 getPubkey: privkey => nobleSecp256k1.getPublicKey( privkey, true ).substring( 2 ),
                 bytesToHex: bytes => bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, "0" ), "" ),
@@ -279,7 +282,7 @@
                         var state = lnBlinder.state[ state_id ];
                         if ( !amount || typeof amount !== "number" ) amount = Number( prompt( `enter an amount of sats you want to receive` ) );
                         if ( !amount ) return;
-                        $( '.all_trampolines_2' ).classList.remove( "hidden" );
+                        $( '.all_trampolines' ).classList.remove( "hidden" );
                         await super_nostr.waitSomeSeconds( 1 );
                         var tries = 0;
                         var loop = async () => {
@@ -294,7 +297,7 @@
                             return coordinator;
                         }
                         var coordinator = await loop();
-                        $( '.all_trampolines_2' ).classList.add( "hidden" );
+                        $( '.all_trampolines' ).classList.add( "hidden" );
                         if ( !coordinator ) return;
                         var privkey = lnBlinder.getRand( 32 );
                         var pubkey = lnBlinder.getPubkey( privkey );
@@ -350,10 +353,10 @@
                             var nwc_info = nwcjs.nwc_infos[ 0 ];
                             var delay_tolerance = 10;
                             var reply = await nwcjs.makeHodlInvoice( nwc_info, amount, pmthash, wrapped_locktime, null, null, delay_tolerance );
+                            //TODO: handle the case where the above command does not work
                             console.log( reply );
                             console.log( 'here is your wrapped invoice:' );
                             console.log( reply.result.invoice );
-                            //TODO: handle the case where the above command does not work
                             var wrapped_invoice = reply.result.invoice;
                             state.payments_in_progress[ uuid ] = [ "awaiting_wrapped_invoice", amount, invoice, wrapped_locktime, coordinator ];
                             lnBlinder.lbr.phaseTwo( state_id, uuid, wrapped_invoice );
@@ -407,7 +410,7 @@
                         var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", c_pubkey ] ] );
                         super_nostr.sendEvent( event, relays[ 0 ] );
                         var original_invoice = state.payments_in_progress[ uuid ][ 2 ];
-                        state.payments_in_progress[ uuid ] = [ "awaiting_payment", wrapped_invoice, original_invoice ];
+                        state.payments_in_progress[ uuid ] = [ "awaiting_payment", wrapped_invoice, original_invoice, coordinator ];
                         var customNetwork;
                         if ( wrapped_invoice.startsWith( "lntbs" ) ) customNetwork = { bech32: "tbs", pubKeyHash: 63, scriptHash: 123, validWitnessVersions: [ 0, 1 ] }
                         var pmthash = lnBlinder.getInvoicePmthash( wrapped_invoice, customNetwork );
@@ -418,6 +421,7 @@
                                 var delay_tolerance = 10;
                                 var status_info = await nwcjs.checkInvoice( nwc_info, wrapped_invoice, delay_tolerance );
                                 //TODO: handle the case where the above command fails
+                                console.log( status_info );
                                 var status = status_info.result.hodl_status;
                                 console.log( status );
                                 if ( status.startsWith( "PAYMENT_DETECTED" ) ) return;
@@ -442,6 +446,7 @@
                         var payment = state.payments_in_progress[ uuid ];
                         var wrapped_invoice = payment[ 1 ];
                         var original_invoice = payment[ 2 ];
+                        var coordinator = payment[ 3 ];
                         var listenFunction = async socket => {
                             var subId = super_nostr.bytesToHex( crypto.getRandomValues( new Uint8Array( 8 ) ) );
                             var filter  = {}
@@ -467,6 +472,7 @@
                                     var delay_tolerance = 10;
                                     var status_info = await nwcjs.settleHodlInvoice( nwc_info, json.value.preimage, delay_tolerance );
                                     //TODO: handle the case where the above command fails
+                                    console.log( status_info );
                                     var settled_status = status_info.result.hodl_status;
                                     delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
                                 } else {
@@ -476,6 +482,17 @@
                                     console.log( `lncli --network=signet settleinvoice ${json.value.preimage}` );
                                     delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
                                 }
+                                var message_for_coordinator = JSON.stringify({
+                                    type: "payment_received",
+                                    value: {
+                                        uuid,
+                                        preimage: json.value.preimage,
+                                    }
+                                });
+                                var [ c_pubkey, relays ] = lnBlinder.lbr.convertNEvent( coordinator );
+                                var emsg = await super_nostr.alt_encrypt( privkey, c_pubkey, message_for_coordinator );
+                                var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", c_pubkey ] ] );
+                                super_nostr.sendEvent( event, relays[ 0 ] );
                                 showModal( `<p>received</p>` );
                             }
                         }
@@ -484,14 +501,13 @@
                         console.log( 'show this to LBS:' );
                         var payment_string = `lightning:${original_invoice}?comms_channel=${nprofile}`;
                         console.log( payment_string );
-                        console.log( `have him run this command:` );
-                        console.log( `lnBlinder.lbs.send( '${payment_string}' )` );
+                        // console.log( `have him run this command:` );
+                        // console.log( `lnBlinder.lbs.send( '${payment_string}' )` );
                     },
                 },
                 lbc: {
                     fee: 100,
                     fee_type: 'flat',
-                    hashes_for_which_i_await_preimages: {},
                     init: async ( nwc_string, fee_type, fee_value ) => {
                         if ( fee_type && fee_value ) {
                             lnBlinder.lbc.fee_type = fee_type;
@@ -527,7 +543,7 @@
                         filter.kinds = [ 4 ];
                         filter.since = Math.floor( Date.now() / 1000 );
                         filter[ "#p" ] = [ pubkey ];
-                        var filter2 = {kinds: [ 41865 ], since: Math.floor( Date.now() / 1000 ) - 600,}
+                        var filter2 = {kinds: [ 11865 ], since: Math.floor( Date.now() / 1000 ) - 600,}
                         var subscription = [ "REQ", subId, filter, filter2 ];
                         socket.send( JSON.stringify( subscription ) );
                     },
@@ -541,10 +557,18 @@
                         var state = lnBlinder.state[ state_id ];
                         var privkey = state.privkey;
                         var pubkey = super_nostr.getPubkey( privkey );
-                        if ( event.kind === 41865 ) {
+                        if ( event.kind === 11865 ) {
                             if ( lnBlinder.handled.includes( event.id ) ) return;
                             lnBlinder.handled.push( event.id );
+                            //remove messages from people already on the list
+                            var pubkeys = [];
+                            $$( '.trampoline' ).forEach( item => {
+                                pubkeys.push( lnBlinder.lbr.convertNEvent( item.getAttribute( "data-nprofile" ) )[ 0 ] );
+                            });
+                            var entry_to_remove = pubkeys.indexOf( event.pubkey );
+                            if ( pubkeys.includes( event.pubkey ) ) $$( '.trampoline' )[ entry_to_remove ].remove();
                             var tr_pubkey = event.pubkey;
+                            if ( event.content === "" ) return;
                             var tr_relays = JSON.parse( event.content ).relays;
                             var tr_nprofile = lnBlinder.lbc.convertPubkeyAndRelaysToNprofile( "nprofile", tr_pubkey, tr_relays );
                             var unix_timestamp = event.created_at * 1000;
@@ -578,20 +602,10 @@
                             div2.getElementsByClassName( "tr_time" )[ 0 ].innerText = timestamp;
                             div2.getElementsByClassName( "tr_nprofile" )[ 0 ].innerText = tr_nprofile;
                             var now = Math.floor( Date.now() / 1000 );
-                            var pubkeys = [];
-                            $$( '.trampoline' ).forEach( item => {
-                                pubkeys.push( lnBlinder.lbr.convertNEvent( item.getAttribute( "data-nprofile" ) )[ 0 ] );
-                            });
-                            var entry_to_remove = pubkeys.indexOf( event.pubkey );
-                            var i; for ( i=0; i<2; i++ ) {
-                                if ( pubkeys.includes( event.pubkey ) ) $$( '.trampoline' )[ entry_to_remove ].remove();
-                            }
                             if ( Math.abs( event.created_at - now ) < 5 ) {
                                 $( '.all_trampolines' ).prepend( div );
-                                $( '.all_trampolines_2' ).prepend( div2 );
                             } else {
                                 $( '.all_trampolines' ).append( div );
-                                $( '.all_trampolines_2' ).append( div2 );
                             }
                             return;
                         }
@@ -605,6 +619,7 @@
                         // var nwc_info = nwcjs.nwc_infos[ 0 ];
                         var delay_tolerance = 10;
                         if ( json.type === "get_wrappable_invoice" ) {
+                            if ( lnBlinder.handling_payment ) return;
                             if ( !json.value.amount || typeof json.value.amount !== "number" ) return;
                             if ( !json.value.uuid || typeof json.value.uuid !== "string" ) return;
                             if ( json.value.uuid.length !== 64 ) return;
@@ -631,17 +646,35 @@
                                 });
                                 var emsg = await super_nostr.alt_encrypt( privkey, event.pubkey, reply );
                                 var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
-                                var relays = lnBlinder.relays;
-                                super_nostr.sendEvent( event, relays[ 0 ] );
+                                var socket = super_nostr.sockets[ Object.keys( super_nostr.sockets )[ 0 ] ].socket;
+                                super_nostr.sendEvent( event, socket );
                                 return;
                             }
+                            lnBlinder.handling_payment = true;
+                            //take down offer while handling payment
+                            var kind = 11865;
+                            var evt = await super_nostr.prepEvent( privkey, "", kind );
+                            var socket = super_nostr.sockets[ Object.keys( super_nostr.sockets )[ 0 ] ].socket;
+                            super_nostr.sendEvent( evt, socket );
                             state.payments_in_progress[ json.value.uuid ] = [ "getting_invoice", json.value.amount ];
                             console.log( 'I am the server, I am getting an invoice...' );
                             var amount = json.value.amount + fee_ill_get;
                             var desc = '';
                             // var invoice_info = await nwcjs.makeInvoice( nwc_info, amount, desc, delay_tolerance );
                             // var invoice = invoice_info.result.invoice;
-                            var invoice = prompt( `enter a lightning invoice for this amount: ${amount} sats` );
+                            var html = `
+                                <p>
+                                    Enter a lightning invoice for this amount: ${amount} sats
+                                </p>
+                                <p><input class="invoice_for_user"></p>
+                                <p><button class="submit_invoice" onclick="lnBlinder.data_i_seek[ 'invoice_for_user' ] = $( '.invoice_for_user' ).value;modalVanish();">Submit</button></p>
+                            `;
+                            var block_til_clear = true;
+                            showModal( html, block_til_clear );
+                            $( '.x_modal' ).classList.add( "hidden" );
+                            delete lnBlinder.data_i_seek[ 'invoice_for_user' ];
+                            var invoice = await lnBlinder.getNote( 'invoice_for_user' );
+                            delete lnBlinder.data_i_seek[ 'invoice_for_user' ];
                             //TODO: handle connection errors
                             console.log( 'got it! sending it to the user now' );
                             state.payments_in_progress[ json.value.uuid ] = [ "awaiting_wrapped_invoice", invoice ];
@@ -653,9 +686,9 @@
                                 }
                             });
                             var emsg = await super_nostr.alt_encrypt( privkey, event.pubkey, reply );
-                            var event = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
-                            var relays = lnBlinder.relays;
-                            super_nostr.sendEvent( event, relays[ 0 ] );
+                            var evt = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
+                            var socket = super_nostr.sockets[ Object.keys( super_nostr.sockets )[ 0 ] ].socket;
+                            super_nostr.sendEvent( evt, socket );
                         }
                         if ( json.type === "pay_me" ) {
                             //ensure the wrapped invoice's payment hash matches the one in the invoice the LBC created before
@@ -679,15 +712,39 @@
                             var wrapped_invoice_amount = lnBlinder.getInvoiceAmount( wrapped_invoice, customNetwork );
                             console.log( 'wrapped_invoice_amount:', wrapped_invoice_amount );
                             console.log( 'original_invoice_amount:', original_invoice_amount );
-                            if ( original_invoice_amount - wrapped_invoice_amount < state.fee ) return;
+                            if ( original_invoice_amount - wrapped_invoice_amount < lnBlinder.lbc.fee ) return;
                             delete lnBlinder.state[ state_id ].payments_in_progress[ uuid ];
-                            hashes_for_which_i_await_preimages[ wrapped_invoice_pmthash ] = state.fee;
-                            console.log( 'all is well! pay this invoice:' );
-                            console.log( wrapped_invoice );
+                            lnBlinder.handling_payment = false;
+                            //put offer back up
+                            var kind = 11865;
+                            var privkey = state.privkey;
+                            var event = await super_nostr.prepEvent( privkey, JSON.stringify({
+                                fee: lnBlinder.lbc.fee,
+                                fee_type: lnBlinder.lbc.fee_type,
+                                relays: lnBlinder.relays,
+                            }), kind );
+                            var socket = super_nostr.sockets[ Object.keys( super_nostr.sockets )[ 0 ] ].socket;
+                            super_nostr.sendEvent( event, socket );
+
+                            lnBlinder.state.hashes_for_which_i_await_preimages[ wrapped_invoice_pmthash ] = lnBlinder.lbc.fee;
+                            // console.log( 'all is well! pay this invoice:' );
+                            // console.log( wrapped_invoice );
+                            showModal( `<p>All is well! Pay this invoice:</p><p>${wrapped_invoice}</p>` );
                             // console.log( 'by the way, remember, as LBR you are supposed to do this:' );
                             // console.log( `lncli --network=signet lookupinvoice ${wrapped_invoice_pmthash}` );
                             // console.log( `when your invoice's status goes from OPEN to ACCEPTED, run this command:` );
                             // console.log( `lnBlinder.lbr.phaseThree( '${recipient_state_id}', '${uuid}' );` );
+                        }
+                        if ( json.type === "payment_received" ) {
+                            var preimage = json.value.preimage;
+                            console.log( json, preimage );
+                            var hash = await super_nostr.sha256( lnBlinder.hexToBytes( preimage ) );
+                            if ( !lnBlinder.state.hashes_for_which_i_await_preimages.hasOwnProperty( hash ) ) return;
+                            var earned = lnBlinder.state.hashes_for_which_i_await_preimages[ hash ];
+                            var now = Math.floor( Date.now() / 1000 );
+                            lnBlinder.state.earnings.push( earned, now );
+                            delete lnBlinder.state.hashes_for_which_i_await_preimages[ hash ];
+                            showModal( `<p>you earned ${earned} sats by routing a payment!</p>` );
                         }
                     },
                     convertPubkeyAndRelaysToNprofile: ( prefix, pubkey, relays ) => {
@@ -723,7 +780,7 @@
                                 //announce your availability every 5 minutes
                                 if ( num_of_seconds_waited >= time_to_wait ) {
                                     var socket = super_nostr.sockets[ connection ].socket;
-                                    var kind = 41865;
+                                    var kind = 11865;
                                     var privkey = state.privkey;
                                     var event = await super_nostr.prepEvent( privkey, JSON.stringify({
                                         fee: lnBlinder.lbc.fee,
@@ -763,8 +820,9 @@
                         var state_id;
                         state_ids.every( id => {if ( !id.startsWith( 's' ) ) return true; state_id = id; });
                         var [ invoice, nprofile ] = payment_string.split( ":" )[ 1 ].split( "?comms_channel=" );
-                        console.log( 'pay this invoice:' );
-                        console.log( invoice );
+                        if ( typeof invoice !== "string" || invoice.includes( ";" ) || invoice.includes( ":" ) || invoice.includes( "{" ) || invoice.includes( "}" ) ) return console.log( 'user tried to scam you with this invoice:', invoice );
+                        // console.log( 'pay this invoice:' );
+                        // console.log( invoice );
                         if ( !nwcjs.nwc_infos.length ) nwcjs.processNWCstring( lnBlinder.state[ state_id ].nwc_string );
                         var nwc_info = nwcjs.nwc_infos[ 0 ];
                         var conf = confirm( `click ok if you want to pay automatically or cancel if you want to pay manually` );
@@ -784,10 +842,41 @@
                             if ( nwcjs.nwc_infos.length ) {
                                 var preimage = await loop();
                             } else {
-                                var preimage = prompt( 'pay the invoice in your console and enter the preimage' );
+                                var html = `
+                                    <p>
+                                        Pay the following lightning invoice and enter the preimage:
+                                    </p>
+                                    <p>
+                                        ${invoice}
+                                    </p>
+                                    <p><input class="preimage"></p>
+                                    <p><button class="submit_preimage" onclick="lnBlinder.data_i_seek[ 'preimage' ] = $( '.preimage' ).value;modalVanish();">Submit</button></p>
+                                `;
+                                var block_til_clear = true;
+                                showModal( html, block_til_clear );
+                                $( '.x_modal' ).classList.add( "hidden" );
+                                delete lnBlinder.data_i_seek[ 'preimage' ];
+                                var preimage = await lnBlinder.getNote( 'preimage' );
+                                delete lnBlinder.data_i_seek[ 'preimage' ];
+                                // var preimage = prompt( 'pay the invoice in your console and enter the preimage' );
                             }
                         } else {
-                            var preimage = prompt( 'pay the invoice in your console and enter the preimage' );
+                            var html = `
+                                <p>
+                                    Pay the following lightning invoice and enter the preimage:
+                                </p>
+                                <p>
+                                    ${invoice}
+                                </p>
+                                <p><input class="preimage"></p>
+                                <p><button class="submit_preimage" onclick="lnBlinder.data_i_seek[ 'preimage' ] = $( '.preimage' ).value;modalVanish();">Submit</button></p>
+                            `;
+                            var block_til_clear = true;
+                            showModal( html, block_til_clear );
+                            $( '.x_modal' ).classList.add( "hidden" );
+                            delete lnBlinder.data_i_seek[ 'preimage' ];
+                            var preimage = await lnBlinder.getNote( 'preimage' );
+                            delete lnBlinder.data_i_seek[ 'preimage' ];
                         }
                         var privkey = lnBlinder.getRand( 32 );
                         var pubkey = lnBlinder.getPubkey( privkey );
