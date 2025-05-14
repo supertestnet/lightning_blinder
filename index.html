@@ -117,8 +117,9 @@
     </head>
     <body>
         <h1>Lightning Blinder</h1>
+        <p class="warning">Do not run this on mainnet. I only coded the "happy path" and there are lots of edge cases where you can lose money, including if your internet connection is poor.</p>
         <div class="home">
-            <p>Choose your role:</p>
+            <p>Choose your role</p>
             <p><button class="sender">Sender</button> <button class="coordinator">Coordinator</button> <button class="recipient">Recipient</button></p>
         </div>
         <div class="sender_page hidden">
@@ -128,6 +129,10 @@
         <div class="coordinator_page hidden">
             <h2>Coordinator</h2>
             <p>Wait here for notifications</p>
+            <h2>Earnings</h2>
+            <div class="earnings">
+                <p class="none_yet">loading...</p>
+            </div>
         </div>
         <div class="recipient_page hidden">
             <h2>Recipient</h2>
@@ -135,8 +140,22 @@
             <div class="all_trampolines hidden"></div>
         </div>
         <script>
+            if ( $_GET[ "disable_warning" ] === "true" ) $( ".warning" ).classList.add( "hidden" );
             $( '.sender' ).onclick = async () => {
-                var nwc_string = prompt( `enter an nwc string with full permissions` );
+                var html = `
+                    <p>
+                        Enter an nwc string with full permissions
+                    </p>
+                    <p><input class="sender_nwc_string"></p>
+                    <p><button class="submit_sender_nwc_string" onclick="lnBlinder.data_i_seek[ 'sender_nwc_string' ] = $( '.sender_nwc_string' ).value;modalVanish();">Submit</button></p>
+                `;
+                var block_til_clear = true;
+                showModal( html, block_til_clear );
+                $( '.x_modal' ).classList.add( "hidden" );
+                delete lnBlinder.data_i_seek[ 'sender_nwc_string' ];
+                var nwc_string = await lnBlinder.getNote( 'sender_nwc_string' );
+                delete lnBlinder.data_i_seek[ 'sender_nwc_string' ];
+                // var nwc_string = prompt( `enter an nwc string with full permissions` );
                 if ( !nwc_string ) return;
                 var is_good = nwcjs.processNWCstring( nwc_string );
                 if ( !is_good ) return;
@@ -173,6 +192,7 @@
                 $( '.x_modal' ).classList.add( "hidden" );
                 delete lnBlinder.data_i_seek[ 'fee_value' ];
                 var fee_value = await lnBlinder.getNote( 'fee_value' );
+                fee_value = Number( fee_value );
                 delete lnBlinder.data_i_seek[ 'fee_value' ];
                 var state_id = await lnBlinder.lbc.init( null, fee_type, fee_value );
                 showPage( 'coordinator_page' );
@@ -191,8 +211,21 @@
                 $( `.${page}` ).classList.remove( "hidden" );
             }
             window.onload = () => {
-                $( '.send' ).onclick = () => {
-                    var payment_string = prompt( `enter the recipient's payment string` );
+                $( '.send' ).onclick = async () => {
+                    var html = `
+                        <p>
+                            Enter the recipient's payment string
+                        </p>
+                        <p><input class="payment_string"></p>
+                        <p><button class="submit_payment_string" onclick="lnBlinder.data_i_seek[ 'payment_string' ] = $( '.payment_string' ).value;modalVanish();">Submit</button></p>
+                    `;
+                    var block_til_clear = true;
+                    showModal( html, block_til_clear );
+                    $( '.x_modal' ).classList.add( "hidden" );
+                    delete lnBlinder.data_i_seek[ 'payment_string' ];
+                    var payment_string = await lnBlinder.getNote( 'payment_string' );
+                    delete lnBlinder.data_i_seek[ 'payment_string' ];
+                    // var payment_string = prompt( `enter the recipient's payment string` );
                     lnBlinder.lbs.send( payment_string );
                 }
                 $( '.receive' ).onclick = lnBlinder.lbr.receive;
@@ -261,9 +294,22 @@
                     }
                 },
                 lbr: {
-                    init: nwc_string => {
+                    init: async nwc_string => {
                         var state_id = "r_" + lnBlinder.getRand( 16 );
-                        if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
+                        var html = `
+                            <p>
+                                Enter an NWC connection string with permissions to create and settle hodl invoices
+                            </p>
+                            <p><input class="recipient_nwc_string"></p>
+                            <p><button class="submit_recipient_nwc_string" onclick="lnBlinder.data_i_seek[ 'recipient_nwc_string' ] = $( '.recipient_nwc_string' ).value;modalVanish();">Submit</button></p>
+                        `;
+                        var block_til_clear = true;
+                        showModal( html, block_til_clear );
+                        $( '.x_modal' ).classList.add( "hidden" );
+                        delete lnBlinder.data_i_seek[ 'recipient_nwc_string' ];
+                        if ( !nwc_string ) nwc_string = await lnBlinder.getNote( 'recipient_nwc_string' );
+                        delete lnBlinder.data_i_seek[ 'recipient_nwc_string' ];
+                        // if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
                         var state_obj = {
                             privkey: super_nostr.getPrivkey(),
                             payments_in_progress: {},
@@ -271,6 +317,7 @@
                         }
                         lnBlinder.state[ state_id ] = state_obj;
                         super_nostr.newPermanentConnection( lnBlinder.relays[ 0 ], lnBlinder.lbc.listenFunction, lnBlinder.lbc.handleFunction );
+                        lnBlinder.lbr.startLoop();
                         return state_id;
                     },
                     receive: async ( state_id, amount, coordinator ) => {
@@ -280,23 +327,48 @@
                             state_ids.every( id => {if ( !id.startsWith( 'r' ) ) return true; state_id = id; });
                         }
                         var state = lnBlinder.state[ state_id ];
-                        if ( !amount || typeof amount !== "number" ) amount = Number( prompt( `enter an amount of sats you want to receive` ) );
+                        var html = `
+                            <p>
+                                Enter an amount of sats you want to receive
+                            </p>
+                            <p><input type="number" class="amount_to_receive" min="1" step="1"></p>
+                            <p><button class="submit_amount_to_receive" onclick="lnBlinder.data_i_seek[ 'amount_to_receive' ] = $( '.amount_to_receive' ).value;modalVanish();">Submit</button></p>
+                        `;
+                        var block_til_clear = true;
+                        showModal( html, block_til_clear );
+                        $( '.x_modal' ).classList.add( "hidden" );
+                        delete lnBlinder.data_i_seek[ 'amount_to_receive' ];
+                        if ( !amount || typeof amount !== "number" ) amount = await lnBlinder.getNote( 'amount_to_receive' );
+                        delete lnBlinder.data_i_seek[ 'amount_to_receive' ];
+                        // if ( !amount || typeof amount !== "number" ) amount = Number( prompt( `enter an amount of sats you want to receive` ) );
+                        amount = Number( amount );
+                        if ( String( amount ).includes( "," ) || String( amount ).includes( "." ) ) return;
                         if ( !amount ) return;
+                        $$( '.trampoline' ).forEach( item => {
+                            var fee_type = item.getElementsByClassName( "tr_fee" )[ 0 ].getAttribute( "data-fee_type" );
+                            var fee = item.getElementsByClassName( "tr_fee" )[ 0 ].getAttribute( "data-fee" );
+                            fee = Number( fee );
+                            var fee_youll_pay = fee_type === "flat" ? fee : Math.round( amount + ( amount * ( fee / 100 ) ) ) - amount;
+                            item.getElementsByClassName( "fee_youll_pay" )[ 0 ].innerText = fee_youll_pay;
+                        });
                         $( '.all_trampolines' ).classList.remove( "hidden" );
-                        await super_nostr.waitSomeSeconds( 1 );
-                        var tries = 0;
-                        var loop = async () => {
-                            alert( `you will have 3 seconds to copy the nprofile of whoever you want -- get ready, you only get 3 tries` );
-                            await super_nostr.waitSomeSeconds( 3 );
-                            if ( !coordinator ) coordinator = prompt( `enter the nprofile of whoever you want to add to this route` );
-                            if ( !coordinator ) {
-                                tries = tries + 1;
-                                if ( tries > 3 ) return;
-                                return loop();
-                            }
-                            return coordinator;
-                        }
-                        var coordinator = await loop();
+                        delete lnBlinder.data_i_seek[ 'selected_router' ];
+                        var coordinator = await lnBlinder.getNote( 'selected_router' );
+                        delete lnBlinder.data_i_seek[ 'selected_router' ];
+                        // await super_nostr.waitSomeSeconds( 1 );
+                        // var tries = 0;
+                        // var loop = async () => {
+                        //     alert( `you will have 3 seconds to copy the nprofile of whoever you want -- get ready, you only get 3 tries` );
+                        //     await super_nostr.waitSomeSeconds( 3 );
+                        //     if ( !coordinator ) coordinator = prompt( `enter the nprofile of whoever you want to add to this route` );
+                        //     if ( !coordinator ) {
+                        //         tries = tries + 1;
+                        //         if ( tries > 3 ) return;
+                        //         return loop();
+                        //     }
+                        //     return coordinator;
+                        // }
+                        // var coordinator = await loop();
                         $( '.all_trampolines' ).classList.add( "hidden" );
                         if ( !coordinator ) return;
                         var privkey = lnBlinder.getRand( 32 );
@@ -315,6 +387,7 @@
                         super_nostr.sendEvent( event, relays[ 0 ] );
                         console.log( 'I am the user, I am awaiting an invoice...' );
                         state.payments_in_progress[ uuid ] = [ "awaiting_invoice", amount ];
+                        showModal( `<p>Waiting for the coordinator to agree to the atomic swap</p>` );
                         var loop = async () => {
                             await super_nostr.waitSomeSeconds( 3 );
                             console.log( 'I am the user, I am awaiting an invoice...' );
@@ -360,6 +433,7 @@
                             var wrapped_invoice = reply.result.invoice;
                             state.payments_in_progress[ uuid ] = [ "awaiting_wrapped_invoice", amount, invoice, wrapped_locktime, coordinator ];
                             lnBlinder.lbr.phaseTwo( state_id, uuid, wrapped_invoice );
+                            showModal( `<p>The coordinator agreed, now waiting for them to set up the atomic swap</p>` );
                         } else {
                             console.log( 'original invoice:', invoice );
                             console.log( 'payment hash:', pmthash );
@@ -420,6 +494,7 @@
                                 var nwc_info = nwcjs.nwc_infos[ 0 ];
                                 var delay_tolerance = 10;
                                 var status_info = await nwcjs.checkInvoice( nwc_info, wrapped_invoice, delay_tolerance );
+                                if ( status_info.hasOwnProperty( "error" ) && status_info.error ) return await loop();
                                 //TODO: handle the case where the above command fails
                                 console.log( status_info );
                                 var status = status_info.result.hodl_status;
@@ -498,11 +573,21 @@
                         }
                         var connection = await super_nostr.newPermanentConnection( lnBlinder.relays[ 0 ], listenFunction, handleFunction );
                         payment = [ "awaiting_preimage", wrapped_invoice, original_invoice, nprofile ];
-                        console.log( 'show this to LBS:' );
                         var payment_string = `lightning:${original_invoice}?comms_channel=${nprofile}`;
-                        console.log( payment_string );
+                        // console.log( 'show this to LBS:' );
+                        // console.log( payment_string );
+                        showModal( `<p>Show this to the sender:</p><p>${payment_string}</p>` );
                         // console.log( `have him run this command:` );
                         // console.log( `lnBlinder.lbs.send( '${payment_string}' )` );
+                    },
+                    startLoop: async () => {
+                        //remove old items
+                        var now = Math.floor( Date.now() / 1000 );
+                        $$( '.trampoline' ).forEach( item => {
+                            if ( item.getAttribute( "data-timestamp" ) < now - 600 ) item.classList.add( "hidden" );
+                        });
+                        await super_nostr.waitSomeSeconds( 10 );
+                        lnBlinder.lbr.startLoop();
                     },
                 },
                 lbc: {
@@ -560,10 +645,12 @@
                         if ( event.kind === 11865 ) {
                             if ( lnBlinder.handled.includes( event.id ) ) return;
                             lnBlinder.handled.push( event.id );
-                            //remove messages from people already on the list
+                            //make the item visible
                             var pubkeys = [];
                             $$( '.trampoline' ).forEach( item => {
-                                pubkeys.push( lnBlinder.lbr.convertNEvent( item.getAttribute( "data-nprofile" ) )[ 0 ] );
+                                var router_pubkey = lnBlinder.lbr.convertNEvent( item.getAttribute( "data-nprofile" ) )[ 0 ];
+                                pubkeys.push( router_pubkey );
+                                if ( router_pubkey === event.pubkey && event.content !== "" ) item.classList.remove( "hidden" );
                             });
                             var entry_to_remove = pubkeys.indexOf( event.pubkey );
                             if ( pubkeys.includes( event.pubkey ) ) $$( '.trampoline' )[ entry_to_remove ].remove();
@@ -580,6 +667,8 @@
                                     <div>Fee: <span class="tr_fee"></span></div>
                                     <div>Time: <span class="tr_time"></span></div>
                                     <div>Nprofile: <span class="tr_nprofile"></span></div>
+                                    <p>Fee you'll pay: <span class="fee_youll_pay">0</span> sats</p>
+                                    <p><button class="select_router">Select this router</button></p>
                                 </div>
                             `;
                             var div = document.createElement( "div" );
@@ -587,10 +676,17 @@
                             div = div.firstElementChild;
                             div.setAttribute( "data-nprofile", tr_nprofile );
                             div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = JSON.parse( event.content ).fee;
+                            div.getElementsByClassName( "tr_fee" )[ 0 ].setAttribute( "data-fee", JSON.parse( event.content ).fee );
+                            div.getElementsByClassName( "tr_fee" )[ 0 ].setAttribute( "data-fee_type", JSON.parse( event.content ).fee_type );
                             if ( JSON.parse( event.content ).fee_type === "flat" ) div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div.getElementsByClassName( "tr_fee" )[ 0 ].innerText + " sats";
                             else div.getElementsByClassName( "tr_fee" )[ 0 ].innerText = div.getElementsByClassName( "tr_fee" )[ 0 ].innerText + "%";
                             div.getElementsByClassName( "tr_time" )[ 0 ].innerText = timestamp;
                             div.getElementsByClassName( "tr_nprofile" )[ 0 ].innerText = tr_nprofile;
+                            div.getElementsByClassName( "select_router" )[ 0 ].setAttribute( "data-nprofile", tr_nprofile );
+                            div.getElementsByClassName( "select_router" )[ 0 ].onclick = e => {
+                                var nprofile = e.target.getAttribute( "data-nprofile" );
+                                lnBlinder.data_i_seek[ "selected_router" ] = nprofile;
+                            };
                             if ( event.pubkey === pubkey ) div.classList.add( "tr_self" );
                             var div2 = document.createElement( "div" );
                             div2.innerHTML = html;
@@ -689,6 +785,7 @@
                             var evt = await super_nostr.prepEvent( privkey, emsg, 4, [ [ "p", event.pubkey ] ] );
                             var socket = super_nostr.sockets[ Object.keys( super_nostr.sockets )[ 0 ] ].socket;
                             super_nostr.sendEvent( evt, socket );
+                            showModal( `<p>Your invoice has been sent to the recipient. Within the next 60 seconds, you should expect to see a prompt from this app to pay an invoice as part of the atomic swap process.</p>` );
                         }
                         if ( json.type === "pay_me" ) {
                             //ensure the wrapped invoice's payment hash matches the one in the invoice the LBC created before
@@ -729,7 +826,7 @@
                             lnBlinder.state.hashes_for_which_i_await_preimages[ wrapped_invoice_pmthash ] = lnBlinder.lbc.fee;
                             // console.log( 'all is well! pay this invoice:' );
                             // console.log( wrapped_invoice );
-                            showModal( `<p>All is well! Pay this invoice:</p><p>${wrapped_invoice}</p>` );
+                            showModal( `<p>All is well! Pay this invoice:</p><p>${wrapped_invoice}</p><p>This is safe to do -- this software has checked the invoice and ensured that the atomic swap is set up properly, meaning you cannot lose money by paying it</p>` );
                             // console.log( 'by the way, remember, as LBR you are supposed to do this:' );
                             // console.log( `lncli --network=signet lookupinvoice ${wrapped_invoice_pmthash}` );
                             // console.log( `when your invoice's status goes from OPEN to ACCEPTED, run this command:` );
@@ -742,7 +839,7 @@
                             if ( !lnBlinder.state.hashes_for_which_i_await_preimages.hasOwnProperty( hash ) ) return;
                             var earned = lnBlinder.state.hashes_for_which_i_await_preimages[ hash ];
                             var now = Math.floor( Date.now() / 1000 );
-                            lnBlinder.state.earnings.push( earned, now );
+                            lnBlinder.state.earnings.unshift( [ earned, now ] );
                             delete lnBlinder.state.hashes_for_which_i_await_preimages[ hash ];
                             showModal( `<p>you earned ${earned} sats by routing a payment!</p>` );
                         }
@@ -771,12 +868,6 @@
                             var time_to_wait = 300;
                             var num_of_seconds_waited = time_to_wait;
                             var loop = async () => {
-                                //remove old items
-                                var now = Math.floor( Date.now() / 1000 );
-                                $$( '.trampoline' ).forEach( item => {
-                                    if ( item.getAttribute( "data-timestamp" ) < now - 600 ) item.classList.add( "hidden" );
-                                });
-
                                 //announce your availability every 5 minutes
                                 if ( num_of_seconds_waited >= time_to_wait ) {
                                     var socket = super_nostr.sockets[ connection ].socket;
@@ -793,8 +884,25 @@
                                 } else {
                                     console.log( 'time til next message:', time_to_wait - num_of_seconds_waited );
                                 }
-                                await super_nostr.waitSomeSeconds( 10 );
-                                num_of_seconds_waited = num_of_seconds_waited + 10;
+
+                                //display earnings
+                                $( '.earnings' ).innerHTML = `<p class="total_earnings_el hidden">Total earnings: <span class="total_earnings">0</span> sats</p><p class="none_yet">[none yet]</p>`;
+                                lnBlinder.state.earnings.forEach( earning => {
+                                    $( '.total_earnings_el' ).classList.remove( "hidden" );
+                                    $( '.none_yet' ).classList.add( "hidden" );
+                                    var total = Number( $( '.total_earnings' ).innerText ) + earning[ 0 ];
+                                    $( '.total_earnings' ).innerText = total;
+                                    var div = document.createElement( "div" );
+                                    div.innerHTML = `
+                                        <div class="earning">
+                                            earned ${earning[ 0 ]} sats - ${new Date( earning[ 1 ] * 1000 ).toLocaleDateString( "en-CA" )} ${new Date( earning[ 1 ] * 1000 ).toLocaleTimeString()}
+                                        </div>
+                                    `;
+                                    div = div.firstElementChild;
+                                    $( '.earnings' ).append( div );
+                                });
+                                await super_nostr.waitSomeSeconds( 1 );
+                                num_of_seconds_waited = num_of_seconds_waited + 1;
                                 loop();
                             }
                             loop();
@@ -806,9 +914,23 @@
                     },
                 },
                 lbs: {
-                    init: nwc_string => {
+                    init: async nwc_string => {
                         var state_id = "s_" + lnBlinder.getRand( 16 );
-                        if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
+                        var html = `
+                            <p>
+                                Enter an NWC connection string with full permissions
+                            </p>
+                            <p><input type="number" class="sender_nwc_string" min="1" step="1"></p>
+                            <p><button class="submit_sender_nwc_string" onclick="lnBlinder.data_i_seek[ 'sender_nwc_string' ] = $( '.sender_nwc_string' ).value;modalVanish();">Submit</button></p>
+                        `;
+                        var block_til_clear = true;
+                        if ( !nwc_string ) showModal( html, block_til_clear );
+                        $( '.x_modal' ).classList.add( "hidden" );
+                        delete lnBlinder.data_i_seek[ 'sender_nwc_string' ];
+                        if ( !nwc_string ) nwc_string = await lnBlinder.getNote( 'sender_nwc_string' );
+                        delete lnBlinder.data_i_seek[ 'sender_nwc_string' ];
+                        // if ( !nwc_string ) nwc_string = prompt( 'enter an NWC connection string with permissions to create and settle hodl invoices' );
+                        if ( !nwc_string ) return;
                         var state_obj = {
                             nwc_string,
                         }
