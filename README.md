@@ -2,7 +2,15 @@
 Trick an LSP into thinking *one* wallet is the sender or recipient when it's *really* some other wallet
 
 # What is this?
-This is privacy software for the lightning network. The motivation is: sometimes I talk to people about lightning network privacy, and I am told that most lightning network users rely on custodians and LSPs for their payments, and if you use those, you don't get great privacy. Even some LSPs say that they can trace lightning payments that flow through them.
+This is privacy software for the lightning network. It has several goals: (1) lower the barrier for people to route payments even if they only have a cell phone (2) make it easier to manually add such people to your routes on the lightning network (3) disrupt the assumptions LSPs use to guess who the senders and recipients of lightning payments are
+
+# How to try it?
+This is only proof of concept software and it is easy to lose money with it. So don't do so unless it's for science or entertainment or something.
+
+That said, just click here: https://supertestnet.github.io/lightning_blinder/
+
+# Why did you make this?
+Sometimes I talk to people about lightning network privacy, and I am told that most lightning network users rely on custodians and LSPs for their payments, and if you use those, you don't get great privacy. Even some LSPs say that they can trace lightning payments that flow through them.
 
 For example, Phoenix Wallet has an FAQ that says, "The current version of Phoenix offers no advantage regarding privacy over existing, hosted, custodial wallets. We (ACINQ) know the final destination and amount of payments." [source](https://phoenix.acinq.co/faq) I asked Phoenix for more details about this on twitter, where they pointed out that there is an exception, a case where they *cannot* know the final destination of payments: "in the most common case we can tell the destination...But YMMV [your mileage may vary]...[the] destination may be itself a trampoline node." [source](https://x.com/PhoenixWallet/status/1916844583402590504)
 
