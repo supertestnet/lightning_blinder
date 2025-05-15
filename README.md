@@ -2,7 +2,7 @@
 Trick an LSP into thinking *one* wallet is the sender or recipient when it's *really* some other wallet
 
 # What is this?
-This is privacy software for the lightning network. It has several goals: (1) lower the barrier for people to route payments even if they only have a cell phone that is off most of the time (2) make it easier to manually add such people to your routes on the lightning network (3) disrupt the assumptions LSPs use to guess who the senders and recipients of lightning payments are
+This is privacy software for the lightning network. It has several goals: (1) lower the barrier for people to route payments even if they only have a cell phone that is off most of the time (2) make it easier to manually add such people to your routes on the lightning network (3) disrupt the assumptions LSPs use to guess the senders and recipients of lightning payments
 
 # How to try it?
 This is only proof of concept software and it is easy to lose money with it. So don't do so unless it's for science or entertainment or something.
