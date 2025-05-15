@@ -9,6 +9,9 @@ This is only proof of concept software and it is easy to lose money with it. So 
 
 That said, just click here: https://supertestnet.github.io/lightning_blinder/
 
+# Video demo
+[![](https://supertestnet.github.io/lightning_blinder/ln_blinder_with_yt_logo.png)](https://www.youtube.com/watch?v=oWBX68_2TQo)
+
 # Why did you make this?
 Sometimes I talk to people about lightning network privacy, and I am told that most lightning network users rely on custodians and LSPs for their payments, and if you use those, you don't get great privacy. Even some LSPs say that they can trace lightning payments that flow through them.
 
