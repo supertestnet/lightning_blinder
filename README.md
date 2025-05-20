@@ -22,7 +22,7 @@ This is insightful: Phoenix cannot tell if the destination of a lightning invoic
 By the way, if this software works, it should improve LN privacy regardless of whether you use an LSP, a custodian, or a self-hosted node. But we'll see.
 
 # Protocol setup
-The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC).
+The protocol requires three pieces of software: Lightning Blinder Send (LBS), Lightning Blinder Receive (LBR), and Lightning Blinder Coordinate (LBC). All three are implemented in the index.html file that is part of this github repository.
 
 LBS needs to be software that can do two things: (1) send LN payments (2) communicate with LBR in a manner to be described shortly.
 
