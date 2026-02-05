@@ -13,6 +13,7 @@ END OF CUSTOMIZABLE SETTINGS - DON'T TOUCH ANYTHING AFTER THIS POINT
 
 */
 
+//npm i request ws noble-secp256k1 bech32 bolt11
 var fs = require( 'fs' );
 var request = require('request');
 var WebSocket = require( 'ws' ).WebSocket;
